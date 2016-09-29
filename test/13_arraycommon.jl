@@ -73,6 +73,23 @@ for (CA, A) in ((CategoricalArray, Array), (NullableCategoricalArray, NullableAr
     @test r == A(vcat(a1, a2))
     @test levels(r) == ["Young", "Middle", "Old"]
     @test ordered(r) == false
+
+
+    # Test that overflow of reftype is detected
+    res = @test_throws LevelsException{Int, UInt8} CategoricalArray{Int, 1, UInt8}(256:-1:1)
+    @test res.value.levels == [1]
+
+    x = CategoricalArray{Int, 1, UInt8}(1:255)
+    res = @test_throws LevelsException{Int, UInt8} x[1] = 1000
+    @test res.value.levels == [1000]
+
+    x = CategoricalArray{Int, 1, UInt8}([1, 3, 5])
+    res = @test_throws LevelsException{Int, UInt8} levels!(x, collect(1:256))
+    @test res.value.levels == vcat([2, 4], 6:256)
+
+    x = CategoricalVector(30:500)
+    res = @test_throws LevelsException{Int, UInt8} CategoricalVector{Int, UInt8}(x)
+    @test res.value.levels == collect(285:500)
 end
 
 end
