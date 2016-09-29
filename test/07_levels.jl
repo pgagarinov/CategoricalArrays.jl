@@ -196,4 +196,22 @@ module TestLevels
         @test_throws KeyError get(pool, 6)
         @test pool.valindex == [CategoricalValue(i, pool) for i in 1:4]
     end
+
+
+    # Test that overflow of reftype is detected
+    res = @test_throws LevelsException{Int, UInt8} CategoricalPool{Int, UInt8}(collect(256:-1:1))
+    VERSION >= v"0.5.0-dev" && @test res.value.levels == [1]
+
+    x = CategoricalArray{Int, 1, UInt8}(1:255)
+    res = @test_throws LevelsException{Int, UInt8} x[1] = 1000
+    VERSION >= v"0.5.0-dev" && @test res.value.levels == [1000]
+
+    x = CategoricalArray{Int, 1, UInt8}([1, 3, 256])
+    res = @test_throws LevelsException{Int, UInt8} levels!(x, collect(1:256))
+    VERSION >= v"0.5.0-dev" && @test res.value.levels == [255]
+
+
+    x = CategoricalPool(collect(30:500))
+    res = @test_throws LevelsException{Int, UInt8} convert(CategoricalPool{Int, UInt8}, x)
+    VERSION >= v"0.5.0-dev" && @test res.value.levels == collect(285:500)
 end

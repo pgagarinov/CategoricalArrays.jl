@@ -73,6 +73,29 @@ for (CA, A) in ((CategoricalArray, Array), (NullableCategoricalArray, NullableAr
     @test r == A(vcat(a1, a2))
     @test levels(r) == ["Young", "Middle", "Old"]
     @test ordered(r) == false
+
+
+    # Test that overflow of reftype is detected
+    res = @test_throws LevelsException{Int, UInt8} CategoricalArray{Int, 1, UInt8}(256:-1:1)
+    VERSION >= v"0.5.0-dev" && @test res.value.levels == [1]
+
+    x = CategoricalArray{Int, 1, UInt8}(1:255)
+    res = @test_throws LevelsException{Int, UInt8} x[1] = 1000
+    VERSION >= v"0.5.0-dev" && @test res.value.levels == [1000]
+    @test x[1] = 255 == 255
+
+    x = CategoricalArray{Int, 1, UInt8}([1, 3, 5])
+    res = @test_throws LevelsException{Int, UInt8} levels!(x, collect(1:256))
+    VERSION >= v"0.5.0-dev" && @test res.value.levels == vcat([2, 4], 6:256)
+
+    x = CategoricalVector(30:65570)
+    res = @test_throws LevelsException{Int, UInt16} CategoricalVector{Int, UInt16}(x)
+    VERSION >= v"0.5.0-dev" && @test res.value.levels == collect(65565:65570)
+
+    x = CategoricalVector{String, UInt8}(@compat string.(Char.(65:318)))
+    res = @test_throws LevelsException{Int, UInt8} levels!(x, vcat(levels(x), "az", "bz", "cz"))
+    @test res.value.levels == ["az", "bz"]
+    VERSION >= v"0.5.0-dev" && @test levels!(x, vcat(levels(x), "az", "bz", "cz")) == vcat(levels(x), "az", "bz", "cz")
 end
 
 end
