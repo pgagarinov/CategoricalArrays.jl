@@ -1,5 +1,5 @@
 """
-    recode!(dest::AbstractArray, src::AbstractArray, pairs::Pair...; default=Nullable())
+    recode!(dest::AbstractArray, src::AbstractArray, pairs::AbstractVector{<:Pair}, default=nothing)
 
 Fill `dest` with elements from `src`, replacing those matching a key of `pairs`
 with the corresponding value.
@@ -14,7 +14,8 @@ Elements of `src` as well as values from `pairs` will be `convert`ed when possib
 on assignment.
 If an element matches more than one key, the first match is used.
 """
-function recode!(dest::AbstractArray, src::AbstractArray, pairs::Pair...; default=nothing)
+function recode!{P <: Pair}(dest::AbstractArray, src::AbstractArray,
+                       pairs::AbstractVector{P}, default=nothing)
     if length(dest) != length(src)
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
@@ -39,19 +40,15 @@ function recode!(dest::AbstractArray, src::AbstractArray, pairs::Pair...; defaul
     dest
 end
 
-function recode!{T}(dest::CatArray{T}, src::AbstractArray, pairs::Pair...; default=nothing)
+function recode!{T, P <: Pair}(dest::CatArray{T}, src::AbstractArray,
+                               pairs::AbstractVector{P}, default=nothing)
     if length(dest) != length(src)
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
 
     levs = T[p.second for p in pairs]
     if default !== nothing
-        try
-            push!(levs, default)
-        catch err
-            isa(err, MethodError) || rethrow(err)
-            throw(ArgumentError("cannot `convert` default value $(repr(default)) (of type $(typeof(default))) to type of recoded levels ($T). Choose a value compatible with type of recoded levels."))
-        end
+        push!(levs, default)
     end
 
     levels!(dest.pool, levs)
@@ -72,11 +69,12 @@ function recode!{T}(dest::CatArray{T}, src::AbstractArray, pairs::Pair...; defau
 
         # Value not in any of the pairs
         if default === nothing
+            v = src[i]
             try
-                dest[i] = src[i] # Need a dictionary lookup, and potentially adding a new level
+                dest[i] = v # Need a dictionary lookup, and potentially adding a new level
             catch err
                 isa(err, MethodError) || rethrow(err)
-                throw(ArgumentError("cannot `convert` value $(repr(src[i])) (of type $(typeof(src[i]))) to type of recoded levels ($T). This will happen when not all original levels are recoded (i.e. some are preserved) and their type is incompatible with that of recoded levels."))
+                throw(ArgumentError("cannot `convert` value $(repr(v)) (of type $(typeof(v))) to type of recoded levels ($T). This will happen when not all original levels are recoded (i.e. some are preserved) and their type is incompatible with that of recoded levels."))
             end
         else
             drefs[i] = defaultref
@@ -96,35 +94,34 @@ function recode!{T}(dest::CatArray{T}, src::AbstractArray, pairs::Pair...; defau
     dest
 end
 
-function recode!{T}(dest::CatArray{T}, src::CatArray, pairs::Pair...; default=nothing)
+function recode!{T, P<:Pair}(dest::CatArray{T}, src::CatArray,
+                             pairs::AbstractVector{P}, default=nothing)
     if length(dest) != length(src)
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
 
     srclevels = levels(src)
-    levs = T[p.second for p in pairs]
+    seconds = (p.second for p in pairs)
+    levs = collect(T, seconds)
     if default === nothing
         # Remove recoded levels as they won't appear in result
         firsts = (p.first for p in pairs)
-        keptlevels = similar(levs)
-        try
-            for l in keptlevels
-                if !(l in firsts || any(f -> length(f) > 1 && l in f, firsts))
+        keptlevels = Vector{T}()
+        sizehint!(keptlevels, length(srclevels))
+
+        for l in srclevels
+            if !(l in firsts || any(f -> length(f) > 1 && l in f, firsts))
+                try
                     push!(keptlevels, l)
+                catch err
+                    isa(err, MethodError) || rethrow(err)
+                    throw(ArgumentError("cannot `convert` value $(repr(l)) (of type $(typeof(l))) to type of recoded levels ($T). This will happen when not all original levels are recoded (i.e. some are preserved) and their type is incompatible with that of recoded levels."))
                 end
             end
-        catch err
-            isa(err, MethodError) || rethrow(err)
-            throw(ArgumentError("cannot `convert` value $(repr(src[i])) (of type $(typeof(src[i]))) to type of recoded levels ($T). This will happen when not all original levels are recoded (i.e. some are preserved) and their type is incompatible with that of recoded levels."))
         end
         levs, ordered = mergelevels(isordered(src), keptlevels, levs)   
     else
-        try
-            push!(levs, default)
-        catch err
-            isa(err, MethodError) || rethrow(err)
-            throw(ArgumentError("cannot `convert` default value $(repr(default)) (of type $(typeof(default))) to type of recoded levels ($T). Choose a value compatible with type of recoded levels."))
-        end
+        push!(levs, default)
         ordered = isordered(src) # FIXME: test this
     end
 
@@ -168,14 +165,14 @@ function recode!{T}(dest::CatArray{T}, src::CatArray, pairs::Pair...; default=no
 end
 
 """
-    recode!(a::AbstractArray, pairs::Pair...; default=nothing)
+    recode!(a::AbstractArray, pairs::AbstractVector{<:Pair}, default=nothing)
 
 Convenience function for in-place recoding, equivalent to `recode!(a, a, ...)`.
 
 **Example:**
 ```julia
-julia> x = collect(1:10);
-julia> recode!(x, 1=>100, 2:4=>0, [5; 9:10]=>-1);
+julia> x = collect(1:10)
+julia> recode!(x, [1=>100, 2:4=>0, [5; 9:10]=>-1]);
 julia> x
 10-element Array{Int64,1}:
  100
@@ -190,20 +187,11 @@ julia> x
   -1
   ```
 """
-recode!(a::AbstractArray, pairs::Pair...; default=nothing) =
-    recode!(a, a, pairs...; default=default)
-
-
-Base.@pure promote_pairtype(p::Pair, q::Pair) = promote_pairtype(typeof(p), typeof(q))
-Base.@pure promote_pairtype(p::Pair, q::Pair, r::Pair, s::Pair...) =
-    promote_pairtype(typeof(p), promote_pairtype(q, r, s...))
-Base.@pure promote_pairtype{S, T}(::Type{T}, ::Type{S}) =
-    Pair{promote_type(T.parameters[1], S.parameters[1]),
-         promote_type(T.parameters[2], S.parameters[2])}
-pair_valtype{K, V}(::Type{Pair{K, V}}) = V
+recode!{P<:Pair}(a::AbstractArray, pairs::AbstractVector{P}, default=nothing) =
+    recode!(a, a, pairs, default)
 
 """
-    recode(src::AbstractArray, pairs::Pair...; default=nothing)
+    recode(src::AbstractArray, pairs::AbstractVector{<:Pair}, default=nothing)
 
 Return a new `CategoricalArray` with elements from `a`, replacing elements matching a key
 of `pairs` with the corresponding value. The type of the array is chosen using `promote`
@@ -218,7 +206,7 @@ If an element matches more than one key, the first match is used.
 
 **Example:**
 ```julia
-julia> y = recode(x, 1=>100, 2:4=>0, [5; 9:10]=>-1)
+julia> y = recode(1:10, [1=>100, 2:4=>0, [5; 9:10]=>-1])
 10-element CategoricalArrays.CategoricalArray{Int64,1,UInt32}:
  100
  0  
@@ -232,18 +220,18 @@ julia> y = recode(x, 1=>100, 2:4=>0, [5; 9:10]=>-1)
  -1 
   ```
 """
-function recode(src::AbstractArray, pairs::Pair...; default=nothing)
-    # T cannot take into account default nor eltype(src), since the former isn't specialized on,
-    # and whether the latter matters is only known at compile time (all levels recoded or not)
-    T = pair_valtype(promote_pairtype(pairs...))
+function recode{A, B}(src::AbstractArray, pairs::AbstractVector{Pair{A, B}}, default=nothing)
+    # T cannot take into account eltype(src), since we can't know
+    # whether it matters at compile time (all levels recoded or not)
+    T = default === nothing ? B : promote_type(B, typeof(default))
     dest = CategoricalArray{T}(size(src))
-    recode!(dest, src, pairs...; default=default)
+    recode!(dest, src, pairs, default)
 end
 
-function recode{S, N, R}(src::CatArray{S, N, R}, pairs::Pair...; default=nothing)
-    # T cannot take into account default nor eltype(src), since the former isn't specialized on,
-    # and whether the latter matters is only known at compile time (all levels recoded or not)
-    T = pair_valtype(promote_pairtype(pairs...))
+function recode{S, N, R, A, B}(src::CatArray{S, N, R}, pairs::AbstractVector{Pair{A, B}}, default=nothing)
+    # T cannot take into account eltype(src), since we can't know
+    # whether it matters at compile time (all levels recoded or not)
+    T = default === nothing ? B : promote_type(B, typeof(default))
     dest = CategoricalArray{T, N, R}(size(src))
-    recode!(dest, src, pairs...; default=default)
+    recode!(dest, src, pairs, default)
 end
