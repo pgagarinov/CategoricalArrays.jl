@@ -15,7 +15,7 @@ on assignment.
 If an element matches more than one key, the first match is used.
 """
 function recode!{P <: Pair}(dest::AbstractArray, src::AbstractArray,
-                       pairs::AbstractVector{P}, default=nothing)
+                            pairs::AbstractVector{P}, default::Any=nothing)
     if length(dest) != length(src)
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
@@ -32,7 +32,7 @@ function recode!{P <: Pair}(dest::AbstractArray, src::AbstractArray,
         end
 
         # Value not in any of the pairs
-        dest[i] = ifelse(default == nothing, src[i], default)
+        dest[i] = default == nothing ? src[i] : default
 
         @label nextitem
     end
@@ -41,7 +41,7 @@ function recode!{P <: Pair}(dest::AbstractArray, src::AbstractArray,
 end
 
 function recode!{T, P <: Pair}(dest::CatArray{T}, src::AbstractArray,
-                               pairs::AbstractVector{P}, default=nothing)
+                               pairs::AbstractVector{P}, default::Any=nothing)
     if length(dest) != length(src)
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
@@ -55,14 +55,13 @@ function recode!{T, P <: Pair}(dest::CatArray{T}, src::AbstractArray,
 
     lens = [length(p.first) for p in pairs]
     drefs = dest.refs
-    pairmap = [findfirst(levs, l) for l in levs]
     defaultref = length(levs)
     @inbounds for i in eachindex(drefs, src)
         for j in 1:length(pairs)
             p = pairs[j]
             if (lens[j] == 1 && isequal(src[i], p.first)) ||
                (lens[j] > 1 && src[i] in p.first)
-                drefs[i] = pairmap[j]
+                drefs[i] = j
                 @goto nextitem
             end
         end
@@ -85,7 +84,7 @@ function recode!{T, P <: Pair}(dest::CatArray{T}, src::AbstractArray,
 
     # Put existing levels first, and sort them if possible
     # for consistency with CategoricalArray
-    oldlevels = [l for l in levels(dest) if !(l in levs)]
+    oldlevels = setdiff(levels(dest), levs)
     if method_exists(isless, (eltype(oldlevels), eltype(oldlevels)))
         sort!(oldlevels)
     end
@@ -95,14 +94,13 @@ function recode!{T, P <: Pair}(dest::CatArray{T}, src::AbstractArray,
 end
 
 function recode!{T, P<:Pair}(dest::CatArray{T}, src::CatArray,
-                             pairs::AbstractVector{P}, default=nothing)
+                             pairs::AbstractVector{P}, default::Any=nothing)
     if length(dest) != length(src)
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
 
     srclevels = levels(src)
-    seconds = (p.second for p in pairs)
-    levs = collect(T, seconds)
+    seconds = T[p.second for p in pairs]
     if default === nothing
         # Remove recoded levels as they won't appear in result
         firsts = (p.first for p in pairs)
@@ -119,9 +117,10 @@ function recode!{T, P<:Pair}(dest::CatArray{T}, src::CatArray,
                 end
             end
         end
-        levs, ordered = mergelevels(isordered(src), keptlevels, levs)   
+        levs, ordered = mergelevels(isordered(src), keptlevels, seconds)
+        pairmap = indexin(seconds, levs)
     else
-        push!(levs, default)
+        levs = push!(seconds, default)
         ordered = isordered(src) # FIXME: test this
     end
 
@@ -135,14 +134,13 @@ function recode!{T, P<:Pair}(dest::CatArray{T}, src::CatArray,
     origmap = indexin(index(src.pool), levs)
     indexmap = Vector{Int}(length(srclevels)+1)
     indexmap[1] = 0 # For null values
-    pairmap = [findfirst(levs, l) for l in seconds]
     defaultref = length(levs)
     @inbounds for (i, l) in enumerate(index(src.pool))
         for j in 1:length(pairs)
             p = pairs[j]
             if (lens[j] == 1 && isequal(l, p.first)) ||
                (lens[j] > 1 && l in p.first)
-                indexmap[i+1] = pairmap[j]
+                indexmap[i+1] = default === nothing ? pairmap[j] : j
                 @goto nextitem
             end
         end
@@ -187,7 +185,7 @@ julia> x
   -1
   ```
 """
-recode!{P<:Pair}(a::AbstractArray, pairs::AbstractVector{P}, default=nothing) =
+recode!{P<:Pair}(a::AbstractArray, pairs::AbstractVector{P}, default::Any=nothing) =
     recode!(a, a, pairs, default)
 
 """
@@ -220,7 +218,7 @@ julia> y = recode(1:10, [1=>100, 2:4=>0, [5; 9:10]=>-1])
  -1 
   ```
 """
-function recode{A, B}(src::AbstractArray, pairs::AbstractVector{Pair{A, B}}, default=nothing)
+function recode{A, B}(src::AbstractArray, pairs::AbstractVector{Pair{A, B}}, default::Any=nothing)
     # T cannot take into account eltype(src), since we can't know
     # whether it matters at compile time (all levels recoded or not)
     T = default === nothing ? B : promote_type(B, typeof(default))
@@ -228,7 +226,7 @@ function recode{A, B}(src::AbstractArray, pairs::AbstractVector{Pair{A, B}}, def
     recode!(dest, src, pairs, default)
 end
 
-function recode{S, N, R, A, B}(src::CatArray{S, N, R}, pairs::AbstractVector{Pair{A, B}}, default=nothing)
+function recode{S, N, R, A, B}(src::CatArray{S, N, R}, pairs::AbstractVector{Pair{A, B}}, default::Any=nothing)
     # T cannot take into account eltype(src), since we can't know
     # whether it matters at compile time (all levels recoded or not)
     T = default === nothing ? B : promote_type(B, typeof(default))
