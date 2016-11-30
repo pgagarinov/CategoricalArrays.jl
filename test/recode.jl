@@ -148,6 +148,6 @@ module TestRecode
     @test !isordered(y)
 
     # TODO: test overlapping pairs, and pairs with no matches
-    # fix recode!(CategoricalArray(x), CategoricalArray(x), 1, [1:1=>100, 4:4=>0, 5:6=>-1])
-    # recode!(CategoricalArray(x), CategoricalArray(x), 1, [1=>100, 4=>0, 5:6=>-1])
+    # fix recode!(CategoricalArray(x), CategoricalArray(x), [1:1=>100, 4:4=>0, 5:6=>-1], 1)
+    # recode!(CategoricalArray(x), CategoricalArray(x), [1=>100, 4=>0, 5:6=>-1], 1)
 end

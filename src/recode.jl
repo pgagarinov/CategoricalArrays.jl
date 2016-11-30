@@ -20,12 +20,11 @@ function recode!{P <: Pair}(dest::AbstractArray, src::AbstractArray,
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
 
-    lens = [length(p.first) for p in pairs]
     @inbounds for i in eachindex(dest, src)
         for j in 1:length(pairs)
             p = pairs[j]
-            if (lens[j] == 1 && isequal(src[i], p.first)) ||
-               (lens[j] > 1 && src[i] in p.first)
+            if (!isa(p.first, Union{AbstractArray, Tuple}) && isequal(src[i], p.first)) ||
+               (isa(p.first, Union{AbstractArray, Tuple}) && src[i] in p.first)
                 dest[i] = p.second
                 @goto nextitem
             end
@@ -53,14 +52,13 @@ function recode!{T, P <: Pair}(dest::CatArray{T}, src::AbstractArray,
 
     levels!(dest.pool, levs)
 
-    lens = [length(p.first) for p in pairs]
     drefs = dest.refs
     defaultref = length(levs)
     @inbounds for i in eachindex(drefs, src)
         for j in 1:length(pairs)
             p = pairs[j]
-            if (lens[j] == 1 && isequal(src[i], p.first)) ||
-               (lens[j] > 1 && src[i] in p.first)
+            if (!isa(p.first, Union{AbstractArray, Tuple}) && isequal(src[i], p.first)) ||
+               (isa(p.first, Union{AbstractArray, Tuple}) && src[i] in p.first)
                 drefs[i] = j
                 @goto nextitem
             end
@@ -127,7 +125,6 @@ function recode!{T, P<:Pair}(dest::CatArray{T}, src::CatArray,
     levels!(dest.pool, levs)
     ordered!(dest, ordered)
 
-    lens = [length(p.first) for p in pairs]
     drefs = dest.refs
     srefs = src.refs
 
@@ -138,8 +135,8 @@ function recode!{T, P<:Pair}(dest::CatArray{T}, src::CatArray,
     @inbounds for (i, l) in enumerate(index(src.pool))
         for j in 1:length(pairs)
             p = pairs[j]
-            if (lens[j] == 1 && isequal(l, p.first)) ||
-               (lens[j] > 1 && l in p.first)
+            if (!isa(p.first, Union{AbstractArray, Tuple}) && isequal(l, p.first)) ||
+               (isa(p.first, Union{AbstractArray, Tuple}) && l in p.first)
                 indexmap[i+1] = default === nothing ? pairmap[j] : j
                 @goto nextitem
             end
