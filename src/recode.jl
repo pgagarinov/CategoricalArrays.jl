@@ -1,21 +1,25 @@
 """
-    recode!(dest::AbstractArray, src::AbstractArray, pairs::AbstractVector{<:Pair}, default=nothing)
+    recode!(dest::AbstractArray, src::AbstractArray, pairs::Pair...)
+    recode!(dest::AbstractArray, src::AbstractArray, default::Any, pairs::Pair...)
 
 Fill `dest` with elements from `src`, replacing those matching a key of `pairs`
 with the corresponding value.
 
 For each `Pair` in `pairs`, if the element is equal to (according to `isequal`) or `in` the key
 (first item of the pair), then the corresponding value (second item) is copied to `src`.
-If the element matches no key and `default` is `nothing` (the default), it is copied as-is;
-if `default` is set to a different value, it is used instead of the original element.
-Set `default=error()` if you want to ensure all elements match at least one key.
+If the element matches no key and `default` is not provided or `nothing`, it is copied as-is;
+if `default` is specified, it is used in place of the original element.
 `dest` and `src` must be of the same length, but not necessarily of the same type.
 Elements of `src` as well as values from `pairs` will be `convert`ed when possible
 on assignment.
 If an element matches more than one key, the first match is used.
 """
-function recode!{P <: Pair}(dest::AbstractArray, src::AbstractArray,
-                            pairs::AbstractVector{P}, default::Any=nothing)
+function recode! end
+
+recode!(dest::AbstractArray, src::AbstractArray, pairs::Pair...) =
+    recode!(dest, src, nothing, pairs...)
+
+function recode!(dest::AbstractArray, src::AbstractArray, default::Any, pairs::Pair...)
     if length(dest) != length(src)
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
@@ -39,8 +43,7 @@ function recode!{P <: Pair}(dest::AbstractArray, src::AbstractArray,
     dest
 end
 
-function recode!{T, P <: Pair}(dest::CatArray{T}, src::AbstractArray,
-                               pairs::AbstractVector{P}, default::Any=nothing)
+function recode!{T}(dest::CatArray{T}, src::AbstractArray, default::Any, pairs::Pair...)
     if length(dest) != length(src)
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
@@ -91,8 +94,7 @@ function recode!{T, P <: Pair}(dest::CatArray{T}, src::AbstractArray,
     dest
 end
 
-function recode!{T, P<:Pair}(dest::CatArray{T}, src::CatArray,
-                             pairs::AbstractVector{P}, default::Any=nothing)
+function recode!{T}(dest::CatArray{T}, src::CatArray, default::Any, pairs::Pair...)
     if length(dest) != length(src)
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
@@ -160,14 +162,15 @@ function recode!{T, P<:Pair}(dest::CatArray{T}, src::CatArray,
 end
 
 """
-    recode!(a::AbstractArray, pairs::AbstractVector{<:Pair}, default=nothing)
+    recode!(a::AbstractArray, pairs::Pair...)
+    recode!(a::AbstractArray, default::Any, pairs::Pair...)
 
 Convenience function for in-place recoding, equivalent to `recode!(a, a, ...)`.
 
 **Example:**
 ```julia
 julia> x = collect(1:10)
-julia> recode!(x, [1=>100, 2:4=>0, [5; 9:10]=>-1]);
+julia> recode!(x, 1=>100, 2:4=>0, [5; 9:10]=>-1);
 julia> x
 10-element Array{Int64,1}:
  100
@@ -180,28 +183,32 @@ julia> x
    8
   -1
   -1
-  ```
+ ```
 """
-recode!{P<:Pair}(a::AbstractArray, pairs::AbstractVector{P}, default::Any=nothing) =
-    recode!(a, a, pairs, default)
+recode!(a::AbstractArray, default::Any, pairs::Pair...) = recode!(a, a, default, pairs...)
+recode!(a::AbstractArray, pairs::Pair...) = recode!(a, a, nothing, pairs...)
+
+promote_valuetype() = Union{}
+promote_valuetype{K, V}(x::Pair{K, V}) = V
+promote_valuetype{K, V}(x::Pair{K, V}, y::Pair...) = promote_type(V, promote_valuetype(y...))
 
 """
-    recode(a::AbstractArray, pairs::AbstractVector{<:Pair}, default=nothing)
+    recode(a::AbstractArray, pairs::Pair...)
+    recode(a::AbstractArray, default::Any, pairs::Pair...)
 
 Return a new `CategoricalArray` with elements from `a`, replacing elements matching a key
 of `pairs` with the corresponding value. The type of the array is chosen so that it can
 hold all recoded elements (but not necessarily original elements from `a`).
 
 For each `Pair` in `pairs`, if the element is equal to (according to `isequal`) or `in` the key
-(first item of the pair), then the corresponding value (second item) is used.
-If the element matches no key and `default` is `nothing` (the default), it is copied as-is;
-if `default` is set to a different value, it is used instead of the original element.
-Set `default=error()` if you want to ensure all elements match at least one key.
+(first item of the pair), then the corresponding value (second item) is copied to `src`.
+If the element matches no key and `default` is not provided or `nothing`, it is copied as-is;
+if `default` is specified, it is used in place of the original element.
 If an element matches more than one key, the first match is used.
 
 **Example:**
 ```julia
-julia> y = recode(1:10, [1=>100, 2:4=>0, [5; 9:10]=>-1])
+julia> recode(1:10, 1=>100, 2:4=>0, [5; 9:10]=>-1)
 10-element CategoricalArrays.CategoricalArray{Int64,1,UInt32}:
  100
  0  
@@ -213,22 +220,31 @@ julia> y = recode(1:10, [1=>100, 2:4=>0, [5; 9:10]=>-1])
  8  
  -1 
  -1 
-  ```
+ ```
 """
-function recode{A, B}(a::AbstractArray, pairs::AbstractVector{Pair{A, B}}, default::Any=nothing)
+function recode end
+
+recode(a::AbstractArray, pairs::Pair...) = recode(a, nothing, pairs...)
+
+function recode(a::AbstractArray, default::Any, pairs::Pair...)
+    V = promote_valuetype(pairs...)
     # T cannot take into account eltype(src), since we can't know
     # whether it matters at compile time (all levels recoded or not)
     # and using a wider type than necessary would be annoying
-    T = default === nothing ? B : promote_type(B, typeof(default))
+    T = default === nothing ? V : promote_type(typeof(default), V)
     dest = CategoricalArray{T}(size(a))
-    recode!(dest, a, pairs, default)
+    recode!(dest, a, default, pairs...)
 end
 
-function recode{S, N, R, A, B}(a::CatArray{S, N, R}, pairs::AbstractVector{Pair{A, B}}, default::Any=nothing)
+# FIXME: should not be needed, but @inferred is confused without it
+recode(a::CatArray, pairs::Pair...) = recode(a, nothing, pairs...)
+
+function recode{S, N, R}(a::CatArray{S, N, R}, default::Any, pairs::Pair...)
+    V = promote_valuetype(pairs...)
     # T cannot take into account eltype(src), since we can't know
     # whether it matters at compile time (all levels recoded or not)
     # and using a wider type than necessary would be annoying
-    T = default === nothing ? B : promote_type(B, typeof(default))
+    T = default === nothing ? V : promote_type(typeof(default), V)
     dest = CategoricalArray{T, N, R}(size(a))
-    recode!(dest, a, pairs, default)
+    recode!(dest, a, default, pairs...)
 end
