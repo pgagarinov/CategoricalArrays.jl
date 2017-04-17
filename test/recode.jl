@@ -3,10 +3,11 @@ module TestRecode
     using CategoricalArrays
     using CategoricalArrays: DefaultRefType
 
-    # Temporary: needed until this is included in supported Julia releases.
-    # Only needed for heterogeneous pair vectors (which are a corner case)
-    Base.promote_rule{A1, B1, A2, B2}(::Type{Pair{A1, B1}}, ::Type{Pair{A2, B2}}) =
-        Pair{promote_type(A1, A2), promote_type(B1, B2)}
+    if VERSION <= v"0.6.0-dev.1200"
+        # Only needed for heterogeneous pair vectors (which are a corner case)
+        Base.promote_rule{A1, B1, A2, B2}(::Type{Pair{A1, B1}}, ::Type{Pair{A2, B2}}) =
+            Pair{promote_type(A1, A2), promote_type(B1, B2)}
+    end
 
     for x in (1:10, [1:10;], CategoricalArray(1:10))
         # Recoding from Int to Int

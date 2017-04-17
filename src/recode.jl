@@ -186,11 +186,11 @@ recode!{P<:Pair}(a::AbstractArray, pairs::AbstractVector{P}, default::Any=nothin
     recode!(a, a, pairs, default)
 
 """
-    recode(src::AbstractArray, pairs::AbstractVector{<:Pair}, default=nothing)
+    recode(a::AbstractArray, pairs::AbstractVector{<:Pair}, default=nothing)
 
 Return a new `CategoricalArray` with elements from `a`, replacing elements matching a key
-of `pairs` with the corresponding value. The type of the array is chosen using `promote`
-so that it can hold all elements from `a` as well as replaced elements.
+of `pairs` with the corresponding value. The type of the array is chosen so that it can
+hold all recoded elements (but not necessarily original elements from `a`).
 
 For each `Pair` in `pairs`, if the element is equal to (according to `isequal`) or `in` the key
 (first item of the pair), then the corresponding value (second item) is used.
@@ -215,18 +215,20 @@ julia> y = recode(1:10, [1=>100, 2:4=>0, [5; 9:10]=>-1])
  -1 
   ```
 """
-function recode{A, B}(src::AbstractArray, pairs::AbstractVector{Pair{A, B}}, default::Any=nothing)
+function recode{A, B}(a::AbstractArray, pairs::AbstractVector{Pair{A, B}}, default::Any=nothing)
     # T cannot take into account eltype(src), since we can't know
     # whether it matters at compile time (all levels recoded or not)
+    # and using a wider type than necessary would be annoying
     T = default === nothing ? B : promote_type(B, typeof(default))
-    dest = CategoricalArray{T}(size(src))
-    recode!(dest, src, pairs, default)
+    dest = CategoricalArray{T}(size(a))
+    recode!(dest, a, pairs, default)
 end
 
-function recode{S, N, R, A, B}(src::CatArray{S, N, R}, pairs::AbstractVector{Pair{A, B}}, default::Any=nothing)
+function recode{S, N, R, A, B}(a::CatArray{S, N, R}, pairs::AbstractVector{Pair{A, B}}, default::Any=nothing)
     # T cannot take into account eltype(src), since we can't know
     # whether it matters at compile time (all levels recoded or not)
+    # and using a wider type than necessary would be annoying
     T = default === nothing ? B : promote_type(B, typeof(default))
-    dest = CategoricalArray{T, N, R}(size(src))
-    recode!(dest, src, pairs, default)
+    dest = CategoricalArray{T, N, R}(size(a))
+    recode!(dest, a, pairs, default)
 end
