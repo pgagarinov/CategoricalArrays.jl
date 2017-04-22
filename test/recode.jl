@@ -11,6 +11,27 @@ module TestRecode
         @test levels(y) == [6, 7, 8, 100, 0, -1]
         @test !isordered(y)
 
+        # Recoding from Int to Int with duplicate recoded values
+        y = @inferred recode(x, 1=>100, 2:4=>100, [5; 9:10]=>-1)
+        @test y == [100, 100, 100, 100, -1, 6, 7, 8, -1, -1]
+        @test typeof(y) === CategoricalVector{Int, DefaultRefType}
+        @test levels(y) == [6, 7, 8, 100, -1]
+        @test !isordered(y)
+
+        # Recoding from Int to Int with unused level
+        y = @inferred recode(x, 1=>100, 2:4=>0, [5; 9:10]=>-1, 100=>1)
+        @test y == [100, 0, 0, 0, -1, 6, 7, 8, -1, -1]
+        @test typeof(y) === CategoricalVector{Int, DefaultRefType}
+        @test levels(y) == [6, 7, 8, 100, 0, -1, 1]
+        @test !isordered(y)
+
+        # Recoding from Int to Int with duplicate default
+        y = @inferred recode(x, 100, 1=>100, 2:4=>100, [5; 9:10]=>-1)
+        @test y == [100, 100, 100, 100, -1, 100, 100, 100, -1, -1]
+        @test typeof(y) === CategoricalVector{Int, DefaultRefType}
+        @test levels(y) == [100, -1]
+        @test !isordered(y)
+
         # Recoding from Int to Int, with a first value being Float64
         y = @inferred recode(x, 1.0=>100, 2:4=>0, [5; 9:10]=>-1)
         @test y == [100, 0, 0, 0, -1, 6, 7, 8, -1, -1]
@@ -67,10 +88,49 @@ module TestRecode
 
         # Recoding from Int to Int/String, without any Int value in pairs
         # and keeping some original Int levels
-        # This must fail since we cannot take into account original eltype (whether original levels
-        # are kept is only known at compile time)
+        # This must fail since we cannot take into account original eltype (whether original
+        # levels are kept is only known at run time)
         res = @test_throws ArgumentError recode(x, 1=>"a", 2:4=>"b", [5; 9:10]=>"c")
         @test sprint(showerror, res.value) == "ArgumentError: cannot `convert` value 6 (of type Int64) to type of recoded levels (String). This will happen when not all original levels are recoded (i.e. some are preserved) and their type is incompatible with that of recoded levels."
+
+        # Recoding from Int to Nullable{Int} with null default
+        y = @inferred recode(x, Nullable(), 1=>100, 2:4=>0, [5; 9:10]=>-1)
+        @test isequal(y, [100, 0, 0, 0, -1, Nullable(), Nullable(), Nullable(), -1, -1])
+        @test typeof(y) === NullableCategoricalVector{Int, DefaultRefType}
+        @test levels(y) == [100, 0, -1]
+        @test !isordered(y)
+
+        # Recoding from Int to Nullable{Int} with nullable non-null default
+        y = @inferred recode(x, Nullable(1), 1=>100, 2:4=>0, [5; 9:10]=>-1)
+        @test isequal(y, Nullable{Int}[100, 0, 0, 0, -1, 1, 1, 1, -1, -1])
+        @test typeof(y) === NullableCategoricalVector{Int, DefaultRefType}
+        @test levels(y) == [100, 0, -1, 1]
+        @test !isordered(y)
+
+        # Recoding from Int to Nullable{Int} with nullable value and mixed types
+        y = @inferred recode(x, 1=>Nullable(100), 2:4=>0, [5; 9:10]=>-1.0)
+        @test isequal(y, Nullable{Float64}[100, 0, 0, 0, -1, 6, 7, 8, -1, -1])
+        @test typeof(y) === NullableCategoricalVector{Float64, DefaultRefType}
+        @test levels(y) == [6, 7, 8, 100, 0, -1]
+        @test !isordered(y)        
+
+        # Recoding from Int to Int with overlapping pairs
+        y = @inferred recode(x, 1=>100, 2:4=>0, [5; 9:10]=>-1, 1:10=>0)
+        @test y == [100, 0, 0, 0, -1, 0, 0, 0, -1, -1]
+        @test typeof(y) === CategoricalVector{Int, DefaultRefType}
+        @test levels(y) == [100, 0, -1]
+        @test !isordered(y)
+    end
+
+    # In-place recoding from Int to Int, with changes to levels order
+    for x in ([1:10;], CategoricalArray(1:10))
+        y = @inferred recode!(x, x, 1=>100, 2:4=>0, [5; 9:10]=>-1)
+        @test y === x
+        @test y == [100, 0, 0, 0, -1, 6, 7, 8, -1, -1]
+        if isa(x, CategoricalArray)
+            @test levels(y) == [6, 7, 8, 100, 0, -1]
+            @test !isordered(y)
+        end
     end
 
     for x in (["a", "c", "b", "a"], CategoricalArray(["a", "c", "b", "a"]))
@@ -133,7 +193,7 @@ module TestRecode
     @test levels(y) == ["a", "c"]
     @test isordered(y)
 
-    # Recoding ordered CategoricalArray and breaking orderedness
+    # Recoding ordered CategoricalArray with new level which cannot be ordered
     x = CategoricalArray(["a", "c", "b", "a"])
     ordered!(x, true)
     y = @inferred recode(x, "b"=>"d")
@@ -142,8 +202,33 @@ module TestRecode
     @test levels(y) == ["a", "c", "d"]
     @test !isordered(y)
 
-    # TODO: test overlapping pairs, and pairs with no matches
-    # fix recode!(CategoricalArray(x), CategoricalArray(x), [1:1=>100, 4:4=>0, 5:6=>-1], 1)
-    # recode!(CategoricalArray(x), CategoricalArray(x), [1=>100, 4=>0, 5:6=>-1], 1)
-    # test with Nullable() default
+    # Recoding ordered CategoricalArray with conflicting orders
+    x = CategoricalArray(["a", "c", "b", "a"])
+    ordered!(x, true)
+    y = @inferred recode(x, "b"=>"b", "a"=>"a")
+    @test y == ["a", "c", "b", "a"]
+    @test typeof(y) === CategoricalVector{String, DefaultRefType}
+    @test levels(y) == ["c", "b", "a"]
+    @test !isordered(y)
+
+    # Recoding ordered CategoricalArray with default already in levels
+    x = CategoricalArray(["a", "c", "b", "a"])
+    ordered!(x, true)
+    y = @inferred recode(x, "a", "c"=>"b")
+    @test y == ["a", "b", "a", "a"]
+    @test typeof(y) === CategoricalVector{String, DefaultRefType}
+    @test levels(y) == ["b", "a"]
+    @test !isordered(y)
+
+    # Recoding ordered CategoricalArray with default not in levels
+    x = CategoricalArray(["d", "c", "b", "d"])
+    ordered!(x, true)
+    y = @inferred recode(x, "a", "c"=>"b")
+    @test y == ["a", "b", "a", "a"]
+    @test typeof(y) === CategoricalVector{String, DefaultRefType}
+    @test levels(y) == ["b", "a"]
+    @test !isordered(y)
+    
+
+    # test with NullableArray/NullableCategoricalArray input
 end

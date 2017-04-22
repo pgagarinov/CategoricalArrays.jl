@@ -1,3 +1,10 @@
+# Julia 0.5 support
+_isnull(x::Any) = false
+_isnull(x::Nullable) = isnull(x)
+
+_unsafe_get(x::Any) = x
+_unsafe_get(x::Nullable) = x.value
+
 """
     recode!(dest::AbstractArray, src::AbstractArray, pairs::Pair...)
     recode!(dest::AbstractArray, src::AbstractArray, default::Any, pairs::Pair...)
@@ -35,7 +42,7 @@ function recode!(dest::AbstractArray, src::AbstractArray, default::Any, pairs::P
         end
 
         # Value not in any of the pairs
-        dest[i] = default == nothing ? src[i] : default
+        dest[i] = default === nothing ? src[i] : default
 
         @label nextitem
     end
@@ -48,21 +55,26 @@ function recode!{T}(dest::CatArray{T}, src::AbstractArray, default::Any, pairs::
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
 
-    levs = T[p.second for p in pairs]
-    if default !== nothing
-        push!(levs, default)
+    vals = T[_unsafe_get(p.second) for p in pairs if !_isnull(p.second)]
+    if default !== nothing && !_isnull(default)
+        push!(vals, _unsafe_get(default))
     end
 
-    levels!(dest.pool, levs)
+    levels!(dest.pool, unique(vals))
+    # In the absence of duplicated recoded values, we do not need to lookup the reference
+    # for each pair in the loop, which is more efficient (with loop unswitching)
+    dupvals = length(vals) != length(levels(dest.pool))
 
     drefs = dest.refs
-    defaultref = length(levs)
+    pairmap = [get(dest.pool, v) for v in vals]
+    defaultref = default === nothing || _isnull(default) ?
+                 0 : get(dest.pool, _unsafe_get(default))
     @inbounds for i in eachindex(drefs, src)
         for j in 1:length(pairs)
             p = pairs[j]
             if (!isa(p.first, Union{AbstractArray, Tuple}) && isequal(src[i], p.first)) ||
                (isa(p.first, Union{AbstractArray, Tuple}) && src[i] in p.first)
-                drefs[i] = j
+                drefs[i] = dupvals ? pairmap[j] : j
                 @goto nextitem
             end
         end
@@ -85,7 +97,7 @@ function recode!{T}(dest::CatArray{T}, src::AbstractArray, default::Any, pairs::
 
     # Put existing levels first, and sort them if possible
     # for consistency with CategoricalArray
-    oldlevels = setdiff(levels(dest), levs)
+    oldlevels = setdiff(levels(dest), vals)
     if method_exists(isless, (eltype(oldlevels), eltype(oldlevels)))
         sort!(oldlevels)
     end
@@ -100,7 +112,7 @@ function recode!{T}(dest::CatArray{T}, src::CatArray, default::Any, pairs::Pair.
     end
 
     srclevels = levels(src)
-    seconds = T[p.second for p in pairs]
+    vals = T[_unsafe_get(p.second) for p in pairs if !_isnull(p.second)]
     if default === nothing
         # Remove recoded levels as they won't appear in result
         firsts = (p.first for p in pairs)
@@ -108,7 +120,7 @@ function recode!{T}(dest::CatArray{T}, src::CatArray, default::Any, pairs::Pair.
         sizehint!(keptlevels, length(srclevels))
 
         for l in srclevels
-            if !(l in firsts || any(f -> length(f) > 1 && l in f, firsts))
+            if !(l in firsts || any(f -> isa(f, Union{AbstractArray, Tuple}) && l in f, firsts))
                 try
                     push!(keptlevels, l)
                 catch err
@@ -117,29 +129,35 @@ function recode!{T}(dest::CatArray{T}, src::CatArray, default::Any, pairs::Pair.
                 end
             end
         end
-        levs, ordered = mergelevels(isordered(src), keptlevels, seconds)
-        pairmap = indexin(seconds, levs)
+        levs, ordered = mergelevels(isordered(src), keptlevels, unique(vals))
     else
-        levs = push!(seconds, default)
-        ordered = isordered(src) # FIXME: test this
+        !_isnull(default) && push!(vals, _unsafe_get(default))
+        levs = unique(vals)
+        # The order of default cannot be determined
+        ordered = false
     end
 
+    srcindex = src.pool === dest.pool ? copy(index(src.pool)) : index(src.pool)
     levels!(dest.pool, levs)
-    ordered!(dest, ordered)
 
     drefs = dest.refs
     srefs = src.refs
 
-    origmap = indexin(index(src.pool), levs)
-    indexmap = Vector{Int}(length(srclevels)+1)
+    origmap = [get(dest.pool, v, 0) for v in srcindex]
+    indexmap = Vector{Int}(length(srcindex)+1)
     indexmap[1] = 0 # For null values
-    defaultref = length(levs)
-    @inbounds for (i, l) in enumerate(index(src.pool))
+    pairmap = [get(dest.pool, v) for v in vals]
+    # Preserving ordered property only makes sense if new order is consistent with previous one
+    ordered && (ordered = issorted(pairmap))
+    ordered!(dest, ordered)
+    defaultref = default === nothing || _isnull(default) ?
+                 0 : get(dest.pool, _unsafe_get(default))
+    @inbounds for (i, l) in enumerate(srcindex)
         for j in 1:length(pairs)
             p = pairs[j]
             if (!isa(p.first, Union{AbstractArray, Tuple}) && isequal(l, p.first)) ||
                (isa(p.first, Union{AbstractArray, Tuple}) && l in p.first)
-                indexmap[i+1] = default === nothing ? pairmap[j] : j
+                indexmap[i+1] = pairmap[j]
                 @goto nextitem
             end
         end
@@ -196,7 +214,7 @@ promote_valuetype{K, V}(x::Pair{K, V}, y::Pair...) = promote_type(V, promote_val
     recode(a::AbstractArray, pairs::Pair...)
     recode(a::AbstractArray, default::Any, pairs::Pair...)
 
-Return a new `CategoricalArray` with elements from `a`, replacing elements matching a key
+Return a new categorical array with elements from `a`, replacing elements matching a key
 of `pairs` with the corresponding value. The type of the array is chosen so that it can
 hold all recoded elements (but not necessarily original elements from `a`).
 
@@ -232,7 +250,11 @@ function recode(a::AbstractArray, default::Any, pairs::Pair...)
     # whether it matters at compile time (all levels recoded or not)
     # and using a wider type than necessary would be annoying
     T = default === nothing ? V : promote_type(typeof(default), V)
-    dest = CategoricalArray{T}(size(a))
+    if T <: Nullable
+        dest = NullableCategoricalArray{eltype(T)}(size(a))
+    else
+        dest = CategoricalArray{T}(size(a))
+    end
     recode!(dest, a, default, pairs...)
 end
 
@@ -245,6 +267,10 @@ function recode{S, N, R}(a::CatArray{S, N, R}, default::Any, pairs::Pair...)
     # whether it matters at compile time (all levels recoded or not)
     # and using a wider type than necessary would be annoying
     T = default === nothing ? V : promote_type(typeof(default), V)
-    dest = CategoricalArray{T, N, R}(size(a))
+    if T <: Nullable
+        dest = NullableCategoricalArray{eltype(T), N, R}(size(a))
+    else
+        dest = CategoricalArray{T, N, R}(size(a))
+    end
     recode!(dest, a, default, pairs...)
 end
