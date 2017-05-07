@@ -26,7 +26,7 @@ function recode! end
 recode!(dest::AbstractArray, src::AbstractArray, pairs::Pair...) =
     recode!(dest, src, nothing, pairs...)
 
-function recode!(dest::AbstractArray, src::AbstractArray, default::Any, pairs::Pair...)
+function recode!{T}(dest::AbstractArray{T}, src::AbstractArray, default::Any, pairs::Pair...)
     if length(dest) != length(src)
         error("dest and src must be of the same length (got $(length(dest)) and $(length(src)))")
     end
@@ -42,7 +42,17 @@ function recode!(dest::AbstractArray, src::AbstractArray, default::Any, pairs::P
         end
 
         # Value not in any of the pairs
-        dest[i] = default === nothing ? src[i] : default
+        if default === nothing
+            v = src[i]
+            try
+                dest[i] = v
+            catch err
+                isa(err, MethodError) || rethrow(err)
+                throw(ArgumentError("cannot `convert` value $(repr(v)) (of type $(typeof(v))) to type of recoded levels ($T). This will happen when not all original levels are recoded (i.e. some are preserved) and their type is incompatible with that of recoded levels."))
+            end
+        else
+            dest[i] = default
+        end
 
         @label nextitem
     end
@@ -251,9 +261,9 @@ function recode(a::AbstractArray, default::Any, pairs::Pair...)
     # and using a wider type than necessary would be annoying
     T = default === nothing ? V : promote_type(typeof(default), V)
     if T <: Nullable
-        dest = NullableCategoricalArray{eltype(T)}(size(a))
+        dest = NullableArray{eltype(T)}(size(a))
     else
-        dest = CategoricalArray{T}(size(a))
+        dest = similar(a, T)
     end
     recode!(dest, a, default, pairs...)
 end
