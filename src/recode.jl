@@ -254,13 +254,13 @@ function recode end
 
 recode(a::AbstractArray, pairs::Pair...) = recode(a, nothing, pairs...)
 
-function recode(a::AbstractArray, default::Any, pairs::Pair...)
+function recode{S}(a::AbstractArray{S}, default::Any, pairs::Pair...)
     V = promote_valuetype(pairs...)
     # T cannot take into account eltype(src), since we can't know
     # whether it matters at compile time (all levels recoded or not)
     # and using a wider type than necessary would be annoying
     T = default === nothing ? V : promote_type(typeof(default), V)
-    if T <: Nullable
+    if S <: Nullable || T <: Nullable
         dest = NullableArray{eltype(T)}(size(a))
     else
         dest = similar(a, T)
@@ -277,7 +277,7 @@ function recode{S, N, R}(a::CatArray{S, N, R}, default::Any, pairs::Pair...)
     # whether it matters at compile time (all levels recoded or not)
     # and using a wider type than necessary would be annoying
     T = default === nothing ? V : promote_type(typeof(default), V)
-    if T <: Nullable
+    if S <: Nullable || T <: Nullable
         dest = NullableCategoricalArray{eltype(T), N, R}(size(a))
     else
         dest = CategoricalArray{T, N, R}(size(a))
