@@ -1,7 +1,7 @@
 module TestLevels
     using Base.Test
     using CategoricalArrays
-    using CategoricalArrays: DefaultRefType
+    using CategoricalArrays: DefaultRefType, _levels!
 
     pool = CategoricalPool([2, 1, 3])
 
@@ -112,7 +112,7 @@ module TestLevels
         @test pool.valindex == [CategoricalValue(i, pool) for i in 1:5]
     end
 
-    @test levels!(pool, [1, 2, 3]) === pool
+    @test _levels!(pool, [1, 2, 3]) === pool
     @test levels(pool) == [1, 2, 3]
 
     @test isa(pool.index, Vector{Int})
@@ -127,7 +127,7 @@ module TestLevels
     @test_throws KeyError get(pool, 10)
     @test pool.valindex == [CategoricalValue(i, pool) for i in 1:3]
 
-    @test levels!(pool, [1, 2, 4]) === pool
+    @test _levels!(pool, [1, 2, 4]) === pool
     @test levels(pool) == [1, 2, 4]
 
     @test isa(pool.index, Vector{Int})
@@ -141,7 +141,7 @@ module TestLevels
     @test_throws KeyError get(pool, 3)
     @test pool.valindex == [CategoricalValue(i, pool) for i in 1:3]
 
-    @test levels!(pool, [6, 5, 4]) === pool
+    @test _levels!(pool, [6, 5, 4]) === pool
     @test levels(pool) == [6, 5, 4]
 
     @test isa(pool.index, Vector{Int})
@@ -156,7 +156,7 @@ module TestLevels
     @test pool.valindex == [CategoricalValue(i, pool) for i in 1:3]
 
     # Changing order while preserving existing levels
-    @test levels!(pool, [5, 6, 4]) === pool
+    @test _levels!(pool, [5, 6, 4]) === pool
     @test levels(pool) == [5, 6, 4]
 
     @test isa(pool.index, Vector{Int})
@@ -171,7 +171,7 @@ module TestLevels
     @test pool.valindex == [CategoricalValue(i, pool) for i in 1:3]
 
     # Adding levels while preserving existing ones
-    @test levels!(pool, [5, 2, 3, 6, 4]) === pool
+    @test _levels!(pool, [5, 2, 3, 6, 4]) === pool
     @test levels(pool) == [5, 2, 3, 6, 4]
 
     @test isa(pool.index, Vector{Int})
@@ -215,10 +215,10 @@ module TestLevels
     @test sprint(showerror, res.value) == "cannot store level(s) 285, 286, 287 and 288 since reference type UInt8 can only hold 255 levels. Use the decompress function to make room for more levels."
 
     pool = CategoricalPool{String, UInt8}(string.(318:-1:65))
-    res = @test_throws LevelsException{String, UInt8} levels!(pool, vcat("az", levels(pool), "bz", "cz"))
+    res = @test_throws LevelsException{String, UInt8} _levels!(pool, vcat("az", levels(pool), "bz", "cz"))
     @test res.value.levels == ["bz", "cz"]
     @test sprint(showerror, res.value) == "cannot store level(s) \"bz\" and \"cz\" since reference type UInt8 can only hold 255 levels. Use the decompress function to make room for more levels."
     lev = copy(levels(pool))
-    levels!(pool, vcat(lev, "az"))
+    _levels!(pool, vcat(lev, "az"))
     @test levels(pool) == vcat(lev, "az")
 end

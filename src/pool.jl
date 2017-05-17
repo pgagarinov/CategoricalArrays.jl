@@ -137,7 +137,7 @@ function Base.delete!{S, R, V}(pool::CategoricalPool{S, R, V}, levels...)
     return pool
 end
 
-function levels!{S, R, V}(pool::CategoricalPool{S, R, V}, newlevels::Vector)
+function _levels!{S, R, V}(pool::CategoricalPool{S, R, V}, newlevels::Vector)
     levs = convert(Vector{S}, newlevels)
     if !allunique(levs)
         throw(ArgumentError(string("duplicated levels found in levs: ",
