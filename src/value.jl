@@ -11,7 +11,7 @@ Base.promote_rule{S, T}(::Type{CategoricalValue{S}}, ::Type{T}) = promote_type(S
 Base.promote_rule{T}(::Type{CategoricalValue}, ::Type{T}) = T
 
 Base.convert{S, T, R}(::Type{S}, x::CategoricalValue{T, R}) = convert(S, index(x.pool)[x.level])
-Base.convert{S}(::Type{Union{S, Null}}, x::CategoricalValue) = convert(S, x)
+Base.convert{S}(::Type{Union{S, Null}}, x::CategoricalValue) = convert(S, index(x.pool)[x.level])
 
 function Base.show{T}(io::IO, x::CategoricalValue{T})
     if @compat(get(io, :compact, false))

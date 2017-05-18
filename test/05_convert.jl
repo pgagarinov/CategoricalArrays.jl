@@ -22,6 +22,10 @@ module TestConvert
     convert(UInt8, v2)
     convert(UInt8, v3)
 
+    convert(Any, v1)
+    convert(Any, v2)
+    convert(Any, v3)
+
     @test get(v1) === 1
     @test get(v2) === 2
     @test get(v3) === 3
