@@ -21,8 +21,7 @@ function reftype(sz::Int)
     end
 end
 
-for (A, V, M) in ((:CategoricalArray, :CategoricalVector, :CategoricalMatrix),
-                  (:NullableCategoricalArray, :NullableCategoricalVector, :NullableCategoricalMatrix))
+let A = :CategoricalArray, V = :CategoricalVector, M = :CategoricalMatrix
     @eval begin
         As = $(string(A))
         Vs = $(string(V))
@@ -125,7 +124,7 @@ for (A, V, M) in ((:CategoricalArray, :CategoricalVector, :CategoricalMatrix),
         $A(dims::Int...; ordered=false) = $A{String}(dims, ordered=ordered)
 
         @compat (::Type{$A{T, N, R}}){T, N, R}(dims::NTuple{N,Int}; ordered=false) =
-            $A{T, N, R}(zeros(R, dims), CategoricalPool{T, R}(ordered))
+            $A{T, N, R, T}(zeros(R, dims), CategoricalPool{T, R}(ordered))
         @compat (::Type{$A{T, N}}){T, N}(dims::NTuple{N,Int}; ordered=false) =
             $A{T, N, DefaultRefType}(dims, ordered=ordered)
         @compat (::Type{$A{T}}){T, N}(dims::NTuple{N,Int}; ordered=false) =
@@ -178,10 +177,10 @@ for (A, V, M) in ((:CategoricalArray, :CategoricalVector, :CategoricalMatrix),
 
         # This method is needed to ensure that a copy of the pool is always made
         # so that ordered!() does not affect the original array
-        @compat function (::Type{$A{T, N, R}}){S, T, N, Q, R}(A::CatArray{S, N, Q}; ordered=_isordered(A))
+        @compat function (::Type{$A{T, N, R, V}}){S, T, N, Q, R, V}(A::CatArray{S, N, Q}; ordered=_isordered(A))
             res = convert($A{T, N, R}, A)
             if res.pool === A.pool # convert() only makes a copy when necessary
-                res = $A{T, N, R}(res.refs, deepcopy(res.pool))
+                res = $A{T, N, R, V}(res.refs, deepcopy(res.pool))
             end
             ordered!(res, ordered)
         end
@@ -276,7 +275,7 @@ for (A, V, M) in ((:CategoricalArray, :CategoricalVector, :CategoricalMatrix),
 
             refs = convert(Array{R, N}, A.refs)
             pool = convert(CategoricalPool{T, R}, A.pool)
-            $A(refs, pool)
+            $A{T, N, R, T}(refs, pool)
         end
         convert{S, T, N, R}(::Type{$A{T, N}}, A::CatArray{S, N, R}) =
             convert($A{T, N, R}, A)
@@ -418,9 +417,6 @@ end
 copy!{T,N}(dest::CatArray{T, N}, src::CatArray{T, N}) =
     copy!(dest, 1, src, 1, length(src))
 
-arraytype{T<:CategoricalArray}(::Type{T}) = CategoricalArray
-arraytype{T<:NullableCategoricalArray}(::Type{T}) = NullableCategoricalArray
-
 """
     similar(A::CategoricalArray, element_type=eltype(A), dims=size(A))
     similar(A::NullableCategoricalArray,element_type=eltype(A), dims=size(A))
@@ -429,7 +425,7 @@ For `CategoricalArray` and `NullableCategoricalArray`, preserves the ordered pro
 of `A` (see [`isordered`](@ref)).
 """
 similar{S, T, M, N, R}(A::CatArray{S, M, R}, ::Type{T}, dims::NTuple{N, Int}) =
-    arraytype(typeof(A)){T, N, R}(dims; ordered=isordered(A))
+    CategoricalArray{T, N, R}(dims; ordered=isordered(A))
 
 """
     compress(A::CategoricalArray)
@@ -443,7 +439,7 @@ performance inside the function where the call is made. Therefore, use it with c
 """
 function compress{T, N}(A::CatArray{T, N})
     R = reftype(length(index(A.pool)))
-    convert(arraytype(typeof(A)){T, N, R}, A)
+    convert(CategoricalArray{T, N, R}, A)
 end
 
 """
@@ -457,11 +453,7 @@ will have room for more levels.
 To avoid the need to call decompress, ensure [`compress`](@ref) is not called when creating
 the categorical array.
 """
-decompress{T, N}(A::CatArray{T, N}) =
-    convert(arraytype(typeof(A)){T, N, DefaultRefType}, A)
-
-arraytype(A::CategoricalArray...) = CategoricalArray
-arraytype(A::CatArray...) = NullableCategoricalArray
+decompress{T, N}(A::CatArray{T, N}) = convert(CategoricalArray{T, N, DefaultRefType}, A)
 
 function vcat(A::CatArray...)
     ordered = any(isordered, A) && all(a->isordered(a) || isempty(levels(a)), A)
@@ -472,20 +464,18 @@ function vcat(A::CatArray...)
         [x==0 ? 0 : ii[x] for x in a.refs]
     end
 
-    T = arraytype(A...)
-    T(DefaultRefType[refs...;], CategoricalPool(newlevels, ordered))
+    T = Base.promote_eltype(A...)
+    CategoricalArray{T, ndims(refs), DefaultRefType, T}(DefaultRefType[refs...;],
+                                                        CategoricalPool(newlevels, ordered))
 end
 
-
-## Categorical-specific methods
-
-@inline function getindex(A::CatArray, I...)
+@inline function getindex{T, N, R}(A::CatArray{T, N, R}, I...)
     @boundscheck checkbounds(A, I...)
     # Let Array indexing code handle everything
     @inbounds r = A.refs[I...]
 
     if isa(r, Array)
-        res = arraytype(A)(r, deepcopy(A.pool))
+        res = CategoricalArray{T, ndims(r), R, T}(r, deepcopy(A.pool))
         return ordered!(res, isordered(A))
     else
         r > 0 || throw(UndefRefError())
@@ -630,7 +620,7 @@ Base.empty!(A::CatArray) = (empty!(A.refs); return A)
 
 function Base.reshape{T, N, R}(A::CatArray{T, N, R}, dims::Dims)
     x = reshape(A.refs, dims)
-    res = arraytype(A){T, ndims(x), R}(x, A.pool)
+    res = CategoricalArray{T, ndims(x), R}(x, A.pool)
     ordered!(res, isordered(res))
 end
 
