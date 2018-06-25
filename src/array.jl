@@ -467,12 +467,6 @@ copyto!(dest::CatArrOrSub, src::CatArrOrSub) =
 copyto!(dest::CatArrOrSub, dstart::Integer, src::CatArrOrSub) =
     copyto!(dest, dstart, src, 1, length(src))
 
-@static if VERSION >= v"0.7.0-DEV.3208"
-    using Future
-    Future.copy!(dest::CatArrOrSub, src::CatArrOrSub) =
-        copyto!(dest, 1, src, 1, length(src))
-end
-
 similar(A::CategoricalArray{S, M, R}, ::Type{T},
         dims::NTuple{N, Int}) where {T, N, S, M, R} =
     Array{T, N}(undef, dims)
@@ -694,6 +688,7 @@ function Base.push!(A::CategoricalVector, item)
     A
 end
 
+# TODO: make this function faster by computing the mappings from B's levels to A's
 function Base.append!(A::CategoricalVector, B::CategoricalArray)
     levels!(A, union(levels(A), levels(B)))
     len = length(A.refs)
