@@ -59,7 +59,7 @@ using CategoricalArrays: DefaultRefType, level,  reftype, leveltype, catvalue, i
         @test leveltype(typeof(x)) === String
         @test reftype(x) === DefaultRefType
         @test reftype(typeof(x)) === DefaultRefType
-        @test x isa CategoricalArrays.CategoricalString{DefaultRefType}
+        @test x isa CategoricalValue{String, DefaultRefType}
 
         @test isa(level(x), DefaultRefType)
         @test level(x) === DefaultRefType(i)

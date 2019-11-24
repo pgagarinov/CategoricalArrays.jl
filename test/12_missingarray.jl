@@ -15,8 +15,8 @@ const ≅ = isequal
                 @test x == a
                 @test leveltype(typeof(x)) === String
                 @test leveltype(x) === String
-                @test catvaluetype(typeof(x)) === CategoricalArrays.CategoricalString{R}
-                @test catvaluetype(x) === CategoricalArrays.CategoricalString{R}
+                @test catvaluetype(typeof(x)) === CategoricalValue{String, R}
+                @test catvaluetype(x) === CategoricalValue{String, R}
                 @test isordered(x) === ordered
                 @test levels(x) == sort(unique(a))
                 @test unique(x) == unique(a)
@@ -69,7 +69,7 @@ const ≅ = isequal
 
                     x2 = categorical(y, ordered=ordered)
                     @test leveltype(x2) === String
-                    @test catvaluetype(x2) === CategoricalArrays.CategoricalString{R1}
+                    @test catvaluetype(x2) === CategoricalValue{String, R1}
                     @test x2 == y
                     if eltype(y) >: Missing
                         @test isa(x2, CategoricalVector{Union{String, Missing}, R1})
@@ -81,7 +81,7 @@ const ≅ = isequal
                     x2 = categorical(y, comp, ordered=ordered)
                     @test x2 == y
                     @test leveltype(x2) === String
-                    @test catvaluetype(x2) === CategoricalArrays.CategoricalString{R2}
+                    @test catvaluetype(x2) === CategoricalValue{String, R2}
                     if eltype(y) >: Missing
                         @test isa(x2, CategoricalVector{Union{String, Missing}, R2})
                     else

@@ -14,13 +14,12 @@ function CategoricalPool(index::Vector{S},
                          order::Vector{R},
                          ordered::Bool=false) where {S, T <: Integer, R <: Integer}
     invindex = convert(Dict{S, R}, invindex)
-    C = catvaluetype(S, R)
-    V = leveltype(C) # might be different from S (e.g. S == SubString, V == String)
-    CategoricalPool{V, R, C}(index, invindex, order, ordered)
+    V = CategoricalValue{S, R}
+    CategoricalPool{S, R, V}(index, invindex, order, ordered)
 end
 
-CategoricalPool{T, R, C}(ordered::Bool=false) where {T, R, C} =
-    CategoricalPool{T, R, C}(T[], Dict{T, R}(), R[], ordered)
+CategoricalPool{T, R, V}(ordered::Bool=false) where {T, R, V} =
+    CategoricalPool{T, R, V}(T[], Dict{T, R}(), R[], ordered)
 CategoricalPool{T, R}(ordered::Bool=false) where {T, R} =
     CategoricalPool(T[], Dict{T, R}(), R[], ordered)
 CategoricalPool{T}(ordered::Bool=false) where {T} =
@@ -193,7 +192,7 @@ end
     end
 end
 
-@inline function Base.get!(pool::CategoricalPool, level::CatValue)
+@inline function Base.get!(pool::CategoricalPool, level::CategoricalValue)
     pool === level.pool && return level.level
     # Use invindex for O(1) lookup
     # TODO: use a global table to cache this information for all pairs of pools

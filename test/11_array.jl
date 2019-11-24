@@ -13,8 +13,8 @@ using CategoricalArrays: DefaultRefType, catvaluetype, leveltype
     @test x == a
     @test leveltype(typeof(x)) === String
     @test leveltype(x) === String
-    @test catvaluetype(typeof(x)) === CategoricalArrays.CategoricalString{R}
-    @test catvaluetype(x) === CategoricalArrays.CategoricalString{R}
+    @test catvaluetype(typeof(x)) === CategoricalValue{String, R}
+    @test catvaluetype(x) === CategoricalValue{String, R}
     @test isordered(x) === ordered
     @test levels(x) == sort(unique(a))
     @test unique(x) == unique(a)
@@ -70,14 +70,14 @@ using CategoricalArrays: DefaultRefType, catvaluetype, leveltype
         @test isa(x2, CategoricalVector{String, R1})
         @test isordered(x2) === ordered
         @test leveltype(x2) === String
-        @test catvaluetype(x2) === CategoricalArrays.CategoricalString{R1}
+        @test catvaluetype(x2) === CategoricalValue{String, R1}
 
         x2 = categorical(y, comp, ordered=ordered)
         @test x2 == x
         @test isa(x2, CategoricalVector{String, R2})
         @test isordered(x2) === ordered
         @test leveltype(x2) === String
-        @test catvaluetype(x2) === CategoricalArrays.CategoricalString{R2}
+        @test catvaluetype(x2) === CategoricalValue{String, R2}
     end
 
     x2 = compress(x)

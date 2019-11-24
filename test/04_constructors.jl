@@ -11,7 +11,7 @@ using CategoricalArrays: DefaultRefType, catvalue
     # cannot use non-categorical value as categorical value type
     @test_throws ArgumentError CategoricalPool{Int, UInt8, Int}(Int[], Dict{Int, UInt8}(), UInt8[], false)
     # level type of the pool and categorical value should match
-    @test_throws ArgumentError CategoricalPool{Int, UInt8, CategoricalString{UInt8}}(Int[], Dict{Int, UInt8}(), UInt8[], false)
+    @test_throws ArgumentError CategoricalPool{Int, UInt8, CategoricalValue{String, UInt8}}(Int[], Dict{Int, UInt8}(), UInt8[], false)
     # reference type of the pool and categorical value should match
     @test_throws ArgumentError CategoricalPool{Int, UInt8, CategoricalValue{Int, UInt16}}(Int[], Dict{Int, UInt8}(), UInt8[], false)
     # correct types combination
@@ -45,7 +45,7 @@ end
 @testset "CategoricalPool{String, DefaultRefType}(a b c)" begin
     pool = CategoricalPool(["a", "b", "c"])
 
-    @test isa(pool, CategoricalPool{String, UInt32, CategoricalString{UInt32}})
+    @test isa(pool, CategoricalPool{String, UInt32, CategoricalValue{String, UInt32}})
 
     @test isa(pool.index, Vector{String})
     @test length(pool.index) == 3

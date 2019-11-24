@@ -27,27 +27,21 @@ end
     @test sprint(show, pool) == "$CategoricalPool{String,UInt32}([\"c\",\"b\",\"a\"])"
     @test sprint(show, opool) == "$CategoricalPool{String,UInt32}([\"a\",\"b\",\"c\"]) with ordered levels"
 
-    @test sprint(show, nv1) == "$CategoricalString{UInt32} \"c\""
-    @test sprint(show, nv2) == "$CategoricalString{UInt32} \"b\""
-    @test sprint(show, nv3) == "$CategoricalString{UInt32} \"a\""
+    @test sprint(show, nv1) == "$CategoricalValue{String, UInt32} \"c\""
+    @test sprint(show, nv2) == "$CategoricalValue{String, UInt32} \"b\""
+    @test sprint(show, nv3) == "$CategoricalValue{String, UInt32} \"a\""
 
-    @test sprint(show, ov1) == "$CategoricalString{UInt32} \"c\" (3/3)"
-    @test sprint(show, ov2) == "$CategoricalString{UInt32} \"b\" (2/3)"
-    @test sprint(show, ov3) == "$CategoricalString{UInt32} \"a\" (1/3)"
+    @test sprint(show, ov1) == "$CategoricalValue{String, UInt32} \"c\" (3/3)"
+    @test sprint(show, ov2) == "$CategoricalValue{String, UInt32} \"b\" (2/3)"
+    @test sprint(show, ov3) == "$CategoricalValue{String, UInt32} \"a\" (1/3)"
 
-    if VERSION >= v"0.7.0-DEV.4524"
-        @test sprint(show, nv1, context=:typeinfo=>typeof(nv1)) == "\"c\""
-        @test sprint(show, nv2, context=:typeinfo=>typeof(nv2)) == "\"b\""
-        @test sprint(show, nv3, context=:typeinfo=>typeof(nv3)) == "\"a\""
+    @test sprint(show, nv1, context=:typeinfo=>typeof(nv1)) == "\"c\""
+    @test sprint(show, nv2, context=:typeinfo=>typeof(nv2)) == "\"b\""
+    @test sprint(show, nv3, context=:typeinfo=>typeof(nv3)) == "\"a\""
 
-        @test sprint(show, ov1, context=:typeinfo=>typeof(ov1)) == "\"c\""
-        @test sprint(show, ov2, context=:typeinfo=>typeof(ov2)) == "\"b\""
-        @test sprint(show, ov3, context=:typeinfo=>typeof(ov3)) == "\"a\""
-    else
-        @test sprint(showcompact, nv1) == sprint(showcompact, ov1) == "\"c\""
-        @test sprint(showcompact, nv2) == sprint(showcompact, ov2) == "\"b\""
-        @test sprint(showcompact, nv3) == sprint(showcompact, ov3) == "\"a\""
-    end
+    @test sprint(show, ov1, context=:typeinfo=>typeof(ov1)) == "\"c\""
+    @test sprint(show, ov2, context=:typeinfo=>typeof(ov2)) == "\"b\""
+    @test sprint(show, ov3, context=:typeinfo=>typeof(ov3)) == "\"a\""
 
     @test sprint(print, nv1) == sprint(print, ov1) == "c"
     @test sprint(print, nv2) == sprint(print, ov2) == "b"
