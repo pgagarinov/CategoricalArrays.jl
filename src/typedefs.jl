@@ -118,3 +118,5 @@ const CategoricalMatrix{T, R, V, C, U} = CategoricalArray{T, 2, V, C, U}
 CatArrOrSub{T, N, R} = Union{CategoricalArray{T, N, R},
                              SubArray{<:Any, N, <:CategoricalArray{T, <:Any, R}}} where
                              {T, N, R<:Integer}
+
+const SupportedType = Union{AbstractString, AbstractChar, Number}
