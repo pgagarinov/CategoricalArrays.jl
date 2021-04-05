@@ -403,10 +403,6 @@ using CategoricalArrays: DefaultRefType, leveltype
         @test levels(x) == unique(a)
         @test unique(x) == unique(collect(x))
 
-        if ordered
-            @test_throws OrderedLevelsException x[1:2] .= -1
-            levels!(x, [levels(x); -1])
-        end
         x[1:2] .= -1
         @test x[1] === CategoricalValue(5, x.pool)
         @test x[2] === CategoricalValue(5, x.pool)
@@ -415,22 +411,20 @@ using CategoricalArrays: DefaultRefType, leveltype
         @test levels(x) == vcat(unique(a), -1)
         @test unique(x) == unique(collect(x))
 
-        if ordered
-            @test_throws OrderedLevelsException push!(x, 2.0)
-            levels!(x, [levels(x); 2.0])
-        end
         push!(x, 2.0)
         @test length(x) == 5
         @test x[end] == 2.0
-        @test isordered(x) === ordered
+        @test isordered(x) === false
         @test levels(x) == [0.0,  0.5,  1.0,  1.5, -1.0,  2.0]
 
+        ordered!(x, ordered)
         push!(x, x[1])
         @test length(x) == 6
         @test x[1] == x[end]
         @test isordered(x) === ordered
         @test levels(x) == [0.0,  0.5,  1.0,  1.5, -1.0,  2.0]
 
+        ordered!(x, ordered)
         empty!(x)
         @test length(x) == 0
         @test isordered(x) === ordered
@@ -586,10 +580,6 @@ using CategoricalArrays: DefaultRefType, leveltype
         @test_throws BoundsError x[1:1, -1:1]
         @test_throws BoundsError x[4, :]
 
-        if ordered
-            @test_throws OrderedLevelsException x[1] = "z"
-            levels!(x, [levels(x); "z"])
-        end
         x[1] = "z"
         @test x[1] === CategoricalValue(4, x.pool)
         @test x[2] === CategoricalValue(2, x.pool)
@@ -598,6 +588,7 @@ using CategoricalArrays: DefaultRefType, leveltype
         @test x[5] === CategoricalValue(3, x.pool)
         @test x[6] === CategoricalValue(3, x.pool)
         @test levels(x) == ["a", "b", "c", "z"]
+        @test isordered(x) === false
 
         x[1,:] .= "a"
         @test x[1] === CategoricalValue(1, x.pool)
@@ -607,6 +598,7 @@ using CategoricalArrays: DefaultRefType, leveltype
         @test x[5] === CategoricalValue(1, x.pool)
         @test x[6] === CategoricalValue(3, x.pool)
         @test levels(x) == ["a", "b", "c", "z"]
+        @test isordered(x) === false
 
         x[1,1:2] .= "z"
         @test x[1] === CategoricalValue(4, x.pool)
@@ -616,6 +608,7 @@ using CategoricalArrays: DefaultRefType, leveltype
         @test x[5] === CategoricalValue(1, x.pool)
         @test x[6] === CategoricalValue(3, x.pool)
         @test levels(x) == ["a", "b", "c", "z"]
+        @test isordered(x) === false
 
         x[1,2] = "b"
         @test x[1] === CategoricalValue(4, x.pool)
@@ -625,6 +618,7 @@ using CategoricalArrays: DefaultRefType, leveltype
         @test x[5] === CategoricalValue(1, x.pool)
         @test x[6] === CategoricalValue(3, x.pool)
         @test levels(x) == ["a", "b", "c", "z"]
+        @test isordered(x) === false
     end
 
     # Uninitialized array
@@ -659,49 +653,38 @@ using CategoricalArrays: DefaultRefType, leveltype
         @test_throws UndefRefError x2[2]
         @test levels(x2) == []
 
-        if ordered
-            @test_throws OrderedLevelsException x[1] = "c"
-            levels!(x, [levels(x); "c"])
-        end
         x[1] = "c"
         @test x[1] === CategoricalValue(1, x.pool)
         @test !isassigned(x, 2) && isdefined(x, 2)
         @test_throws UndefRefError x[2]
+        @test isordered(x) === false
         @test levels(x) == ["c"]
 
-        if ordered
-            @test_throws OrderedLevelsException x[1] = "a"
-            levels!(x, [levels(x); "a"])
-        end
         x[1] = "a"
         @test x[1] === CategoricalValue(2, x.pool)
         @test !isassigned(x, 2) && isdefined(x, 2)
         @test_throws UndefRefError x[2]
-        @test isordered(x) === ordered
+        @test isordered(x) === false
         @test levels(x) == ["c", "a"]
 
         x[2] = "c"
         @test x[1] === CategoricalValue(2, x.pool)
         @test x[2] === CategoricalValue(1, x.pool)
+        @test isordered(x) === false
         @test levels(x) == ["c", "a"]
 
-        if ordered
-            @test_throws OrderedLevelsException x[1] = "b"
-            levels!(x, [levels(x); "b"])
-        end
         x[1] = "b"
         @test x[1] === CategoricalValue(3, x.pool)
         @test x[2] === CategoricalValue(1, x.pool)
+        @test isordered(x) === false
         @test levels(x) == ["c", "a", "b"]
 
+        ordered!(x, ordered)
         v = CategoricalValue(2, CategoricalPool(["xyz", "b"]))
-        if ordered
-            @test_throws OrderedLevelsException x[1] = v
-            levels!(x, ["c", "a", "xyz", "b"])
-        end
         x[1] = v
         @test x[1] === CategoricalValue(4, x.pool)
         @test x[2] === CategoricalValue(1, x.pool)
+        @test isordered(x) === false
         @test levels(x) == ["c", "a", "xyz", "b"]
     end
 end
